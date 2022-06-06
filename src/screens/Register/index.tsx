@@ -1,8 +1,12 @@
 import React, { useState } from 'react';
 import { Modal, TouchableWithoutFeedback, Keyboard, Alert } from 'react-native';
-import { useForm } from 'react-hook-form';
 import * as Yup from 'yup';
 import { yupResolver } from '@hookform/resolvers/yup';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import uuid from 'react-native-uuid';
+
+import { useForm } from 'react-hook-form';
+import { useNavigation } from '@react-navigation/native';
 
 import { Button } from '../../Components/Form/Button';
 import { CategorySelectButton } from '../../Components/Form/CategorySelectButton';
@@ -16,6 +20,10 @@ export type FormData = {
     [name: string]: any;
 }
 
+type NavigationProps = {
+    navigate: (screen: string) => void;
+}
+
 const schema = Yup.object().shape({
     name: Yup.string()
         .required('Nome é obrigatório'),
@@ -27,6 +35,7 @@ const schema = Yup.object().shape({
 });
 
 export function Register() {
+    const navigation = useNavigation<NavigationProps>();
     const [transactionType, setTransactioType] = useState('');
     const [categoryModalOpen, setCategoryModalOpen] = useState(false);
 
@@ -38,13 +47,14 @@ export function Register() {
     const {
         control,
         handleSubmit,
+        reset,
         formState: { errors }
     } = useForm({
         resolver: yupResolver(schema)
     });
 
 
-    function handleTransactionTypeSelected(type: 'up' | 'down') {
+    function handleTransactionTypeSelected(type: 'positive' | 'negative') {
         setTransactioType(type);
     }
 
@@ -56,20 +66,45 @@ export function Register() {
         setCategoryModalOpen(true)
     }
 
-    function handleRegister(form: FormData) {
+    async function handleRegister(form: FormData) {
         if (!transactionType)
             return Alert.alert('Selecione o tipo da transação');
 
         if (category.key === 'category')
             return Alert.alert('Selecione a categoria');
 
-        const data = {
+        const newTransaction = {
+            id: String(uuid.v4()),
             name: form.name,
             amount: form.amount,
-            transactionType,
-            category: category.key
+            type: transactionType,
+            category: category.key,
+            date: new Date()
         }
-        console.log(data);
+
+        try {
+            const dataKey = '@gofinances:transactions';
+            const data = await AsyncStorage.getItem(dataKey);
+            const currentData = data ? JSON.parse(data) : [];
+
+            const dataFormatted = [
+                ...currentData,
+                newTransaction
+            ];
+
+            await AsyncStorage.setItem(dataKey, JSON.stringify(dataFormatted));
+
+            reset();
+            setTransactioType('');
+            setCategory({
+                key: 'category',
+                name: 'Categoria'
+            });
+            navigation.navigate('Listagem');
+        } catch (error) {
+            console.log(error);
+            Alert.alert('Não foi possivel salvar');
+        }
     }
 
     return (
@@ -101,15 +136,15 @@ export function Register() {
                             <TransactionTypeButton
                                 title='Income'
                                 type='up'
-                                onPress={() => handleTransactionTypeSelected('up')}
-                                isActive={transactionType === 'up'}
+                                onPress={() => handleTransactionTypeSelected('positive')}
+                                isActive={transactionType === 'positive'}
                             />
 
                             <TransactionTypeButton
                                 title='Outcome'
                                 type='down'
-                                onPress={() => handleTransactionTypeSelected('down')}
-                                isActive={transactionType === 'down'}
+                                onPress={() => handleTransactionTypeSelected('negative')}
+                                isActive={transactionType === 'negative'}
                             />
 
                         </TransactionTypes>
